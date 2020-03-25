@@ -11,6 +11,6 @@ from scrapy.loader.processors import TakeFirst, Join
 
 
 class GoogleApisCrawlerItem(scrapy.Item):
-    class_page = scrapy.Field(output_processor=TakeFirst(),)
-    class_name = scrapy.Field(output_processor=TakeFirst(),)
-    class_description = scrapy.Field(output_processor=TakeFirst(),)
+    page = scrapy.Field(output_processor=TakeFirst(),)
+    name = scrapy.Field(output_processor=TakeFirst(),)
+    description = scrapy.Field(output_processor=TakeFirst(),)

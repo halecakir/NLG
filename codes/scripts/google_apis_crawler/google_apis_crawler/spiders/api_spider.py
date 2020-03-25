@@ -5,6 +5,24 @@ import urllib.parse
 from bs4 import BeautifulSoup
 
 from google_apis_crawler.items import GoogleApisCrawlerItem
+from google_apis_crawler.logger import logger
+
+def get_paragraphs(tag):
+    hr_seen = False
+    paragraphs = []
+    for i in tag.contents:
+        if i.name == "hr":
+            hr_seen = True
+        if hr_seen:
+            if i.name == "p":
+                if 'class' in i.attrs and 'caution' in i.attrs['class']:
+                    #check whether class is was deprecated
+                    pass
+                else:
+                    p = i.get_text().strip().replace('\n', '')
+                    if p:
+                        paragraphs.append(p)
+    return paragraphs
 
 class ApiSpider(scrapy.Spider):
     BASE_URL = "https://developer.android.com/"
@@ -48,7 +66,7 @@ class ApiSpider(scrapy.Spider):
             absolute_href = urllib.parse.urljoin(ApiSpider.BASE_URL, href)
             yield scrapy.Request(absolute_href, self.parse_classes)
             
-    
+    #def parse(self, response):
     def parse_classes(self, response):
         """
             Parses the each classs. 
@@ -59,11 +77,24 @@ class ApiSpider(scrapy.Spider):
         class_page_parser = BeautifulSoup(response.body, "lxml")
         class_page = response.request.url
         class_name = class_page_parser.find_all(class_="jd-inheritance-class-cell")[-1].get_text().strip()
-        class_description = class_page_parser.find_all("p")[2].get_text().strip().replace('\n', '')
+        all_paragraphs = get_paragraphs(class_page_parser.find(id="jd-content"))
 
-        loader.add_value("class_name", class_name)
-        loader.add_value("class_description", class_description)
-        loader.add_value("class_page", class_page)
+        #check whether class is was deprecated
+        #if all_paragraphs[2].get_text().find("class was deprecated") != -1:
+        #    class_description = all_paragraphs[3].get_text().strip().replace('\n', '')
+        #else:
+        #    class_description = all_paragraphs[1].get_text().strip().replace('\n', '')
+        class_description = " ".join(all_paragraphs)
+
+        #if class descriptions is empty save them also.
+        if not class_description: 
+            class_description = " "
+            
+        loader.add_value("name", class_name)
+        loader.add_value("description", class_description)
+        loader.add_value("page", class_page)
+        logger.warning("Class name : {}\n-----\nClass description : {}\n-----\nClass page {}\n\n\n\n". \
+                format(class_name, class_description, class_page))
         yield loader.load_item()
 
 

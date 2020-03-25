@@ -24,6 +24,6 @@ class ClassInfo(Base):
     __tablename__ = "class_info"
 
     id = Column(Integer, primary_key=True)
-    class_name = Column('class_name', Text())
-    class_description = Column('class_description', Text())
-    class_page = Column('class_page', Text())
+    name = Column('name', Text())
+    description = Column('description', Text())
+    page = Column('page', Text())
