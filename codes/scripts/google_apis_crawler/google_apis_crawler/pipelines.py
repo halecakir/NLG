@@ -1,13 +1,7 @@
 # -*- coding: utf-8 -*-
-
-# Define your item pipelines here
-#
-# Don't forget to add your pipeline to the ITEM_PIPELINES setting
-# See: https://doc.scrapy.org/en/latest/topics/item-pipeline.html
-
 from sqlalchemy.orm import sessionmaker
 from scrapy.exceptions import DropItem
-from google_apis_crawler.models import ClassInfo, db_connect, create_table
+from google_apis_crawler.models import Class, Method, db_connect, create_table
 from google_apis_crawler.logger import logger
 
 
@@ -20,17 +14,16 @@ class GoogleApisCrawlerPipeline(object):
 
     def process_item(self, item, spider):
         session = self.Session()
-        class_info = ClassInfo()
-        class_info.name = item["name"]
-        class_info.description = item["description"]
-        class_info.page = item["page"]
+        class_ = Class(item["name"], item["description"], item["page"])
+        for method in item["methods"].keys():
+            m = Method(method, item["methods"][method]["description"], item["methods"][method]["page"])
+            class_.methods.append(m)
         try:
-            session.add(class_info)
+            session.add(class_)
             session.commit()
 
         except:
-            logger.error("Class name : {}\n-----\nClass description : {}\n-----\nClass page {}\n\n\n\n". \
-                format(item["name"], item["description"], item["page"]))
+            logger.error(class_)
             session.rollback()
             raise
 

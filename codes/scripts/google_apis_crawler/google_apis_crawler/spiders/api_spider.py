@@ -1,6 +1,7 @@
 import scrapy
 from scrapy.loader import ItemLoader
 
+import re
 import urllib.parse
 from bs4 import BeautifulSoup
 
@@ -21,7 +22,10 @@ def get_paragraphs(tag):
                 else:
                     p = i.get_text().strip().replace('\n', '')
                     if p:
-                        paragraphs.append(p)
+                        if p.startswith("Added in"):
+                            pass
+                        else:
+                            paragraphs.append(p)
     return paragraphs
 
 class ApiSpider(scrapy.Spider):
@@ -79,23 +83,37 @@ class ApiSpider(scrapy.Spider):
         class_name = class_page_parser.find_all(class_="jd-inheritance-class-cell")[-1].get_text().strip()
         all_paragraphs = get_paragraphs(class_page_parser.find(id="jd-content"))
 
-        #check whether class is was deprecated
-        #if all_paragraphs[2].get_text().find("class was deprecated") != -1:
-        #    class_description = all_paragraphs[3].get_text().strip().replace('\n', '')
-        #else:
-        #    class_description = all_paragraphs[1].get_text().strip().replace('\n', '')
         class_description = " ".join(all_paragraphs)
-
-        #if class descriptions is empty save them also.
-        if not class_description: 
-            class_description = " "
-            
+        if not class_description:
+            class_description = "-"
         loader.add_value("name", class_name)
         loader.add_value("description", class_description)
         loader.add_value("page", class_page)
-        logger.warning("Class name : {}\n-----\nClass description : {}\n-----\nClass page {}\n\n\n\n". \
-                format(class_name, class_description, class_page))
+        
+        methods = {}
+        if class_page_parser.find(id="pubmethods"): #if it has public methods
+            for table_row in class_page_parser.find(id="pubmethods").find_all("tr")[1:]: #except table name
+                table_data = table_row.find_all("td")
+                return_type = table_data[0].find("code").get_text().strip().replace('\n', '')
+                return_type = re.sub(' +', ' ', return_type)
+                method_name = table_data[1].find("code").get_text().strip().replace('\n', '')
+                method_description = "-"
+                if table_data[1].find("p"):
+                    method_description = table_data[1].find("p").get_text().strip().replace('\n', '')
+                method_page = "-"
+                if table_data[1].find("code").find("a"):
+                    method_page = urllib.parse.urljoin(ApiSpider.BASE_URL, table_data[1].find("code").find("a")["href"])
+                
+                method_signature = "{} {}".format(return_type, method_name)
+                methods[method_signature] = {}
+                methods[method_signature]["description"] = method_description
+                if method_page:
+                    methods[method_signature]["page"] = method_page
+
+        loader.add_value("methods", methods)
         yield loader.load_item()
+
+        
 
 
 
