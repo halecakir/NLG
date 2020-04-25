@@ -90,4 +90,4 @@ ITEM_PIPELINES = {
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
 
 
-CONNECTION_STRING = 'sqlite:////Users/huseyinalecakir/Desktop/Security/NLG/datasets/databases/google_apis.db'
+CONNECTION_STRING = 'sqlite:////home/huseyinalecakir/NLG/datasets/databases/google_apis.db'
