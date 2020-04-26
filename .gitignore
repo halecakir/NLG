@@ -1,1 +1,9 @@
 
+**/library-javadocs
+*.log
+**/__pycache__
+**/datasets/
+
+
+
+.DS_Store
