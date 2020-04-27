@@ -9,7 +9,8 @@ logger = ColoredLogger("parser")
 
 JAVADOC_DIR = os.path.join(
     os.environ["NLG_ROOT"], "datasets/libraries/library-javadocs")
-
+OUTPUT_DIR = os.path.join(
+    os.environ["NLG_ROOT"], "output/other")
 
 def parse_class_list(dir, groupid, artefactid):
     classes, methods = [], []
@@ -107,8 +108,8 @@ def parse_java_docs():
 
     class_ = pd.DataFrame(class_descriptions)
     method_ = pd.DataFrame(method_descriptions)
-    class_.to_csv(os.path.join(JAVADOC_DIR, "classes.csv"))
-    method_.to_csv(os.path.join(JAVADOC_DIR, "methods.csv"))
+    class_.to_csv(os.path.join(OUTPUT_DIR, "classes.csv"))
+    method_.to_csv(os.path.join(OUTPUT_DIR, "methods.csv"))
 
 
 if __name__ == "__main__":
