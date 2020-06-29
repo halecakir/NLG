@@ -88,6 +88,7 @@ def download_java_docs():
     refresh_pages = []
     not_exist_artifacts = []
     timeouts = []
+    test = open("new.json", "w")
     with open(ANALYZED_LIBS, "r") as target:
         data = json.load(target)
         for row in data:
@@ -116,6 +117,7 @@ def download_java_docs():
                             "File is removing {}".format(saved_zip))
                         os.remove(saved_zip)
                 else:
+                    test.write(json.dumps(row)+"," + "\n")
                     logger.warning(
                         "File has already downloaded {}".format(java_doc_url))
             except NoJavaDocError:
