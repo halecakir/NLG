@@ -10,6 +10,7 @@ def get_apps(file_dir):
     sentences = df["sentence"]
     bool_series = sentences.str.startswith("##")
     apps = [app.replace("##", "") for app in sentences[bool_series]]
+    apps = [app.replace(".apk", "") for app in apps if app.endswith(".apk")]
     return apps
 
 if __name__=="__main__":
