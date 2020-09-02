@@ -2,6 +2,7 @@ import requests
 import os
 import re
 import json
+import sys
 
 from bs4 import BeautifulSoup
 from lxml import html
@@ -14,12 +15,15 @@ logger = ColoredLogger("downloader")
 
 BASE_URL = "https://javadoc.io"
 
-LIBRARIES_DIR = os.path.join(
+"""LIBRARIES_DIR = os.path.join(
     os.environ["NLG_ROOT"], "datasets/libraries/library-descriptions")
 JAVADOC_DIR = os.path.join(
     os.environ["NLG_ROOT"], "datasets/libraries/library-javadocs")
 ANALYZED_LIBS = os.path.join(LIBRARIES_DIR, "analyzed-libraries.json")
+"""
 
+JAVADOC_DIR = sys.argv[1]
+ANALYZED_LIBS = sys.argv[2]
 
 class NoJavaDocError(Exception):
     """No JavaDoc is released for given artifact"""
@@ -30,6 +34,9 @@ class JavaDocRefreshError(Exception):
     """Javadoc is being downloaded. Normally this will be completed within 10 minutes."""
     pass
 
+class JavaDocAlreadyDownloadedError(Exception):
+    """Javadoc has already downloaded."""
+    pass
 
 class ArtifactNotExistError(Exception):
     """Artifact does not exist."""
@@ -37,7 +44,7 @@ class ArtifactNotExistError(Exception):
 
 
 def get_download_url(url):
-    logger.debug("Download url is scraping {}".format(url))
+    #logger.debug("Download url is scraping {}".format(url))
     page = requests.get(url, timeout=30)
     soup = BeautifulSoup(page.content, "html.parser")
 
@@ -52,12 +59,12 @@ def get_download_url(url):
     tree = html.fromstring(page.content)
     elements = tree.xpath('//*[@id="navbar-collapse"]/ul[1]/li[4]/a')
     path = elements[0].attrib['href']
-    logger.debug("Url scraping is completed")
+    #logger.debug("Url scraping is completed")
     return urllib.parse.urljoin(BASE_URL, path)
 
 
 def download_jar(url, save_dir):
-    logger.debug("Jar is downloading {}".format(url))
+    #logger.debug("Jar is downloading {}".format(url))
     link_components = urllib.parse.urlsplit(url).path.split('/')
     groupid = link_components[2]
     artefactid = link_components[3]
@@ -72,8 +79,8 @@ def download_jar(url, save_dir):
                 # Write the chunk to the file
                 fh.write(chunk)
     else:
-        logger.warning("File has already downloaded {}".format(url))
-    logger.debug("Downloading is completed")
+        raise JavaDocAlreadyDownloadedError()
+    #logger.debug("Downloading is completed")
     return outfile
 
 
@@ -88,9 +95,9 @@ def download_java_docs():
     refresh_pages = []
     not_exist_artifacts = []
     timeouts = []
-    test = open("new.json", "w")
     with open(ANALYZED_LIBS, "r") as target:
         data = json.load(target)
+        data = data["libraries"] if "libraries" in data else data
         for row in data:
             try:
                 groupid, artefactid = row["groupid"], row["artefactid"]
@@ -116,10 +123,9 @@ def download_java_docs():
                         logger.error(
                             "File is removing {}".format(saved_zip))
                         os.remove(saved_zip)
-                else:
-                    test.write(json.dumps(row)+"," + "\n")
-                    logger.warning(
-                        "File has already downloaded {}".format(java_doc_url))
+            except JavaDocAlreadyDownloadedError:
+                logger.warning(
+                    "File has already downloaded {}".format(java_doc_url))
             except NoJavaDocError:
                 logger.error(
                     "NoJavaDoc Error {}".format(java_doc_url))
@@ -134,7 +140,8 @@ def download_java_docs():
             except requests.exceptions.ConnectionError:
                 logger.error(
                     "Connection Error {}".format(java_doc_url))
-
+            except TypeError:
+                logger.error("TypeError {}".format(row))
 
 if __name__ == "__main__":
     download_java_docs()

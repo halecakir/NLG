@@ -521,8 +521,7 @@ for i in range(16, 26):
                 if e not in axplorer_map[k]:
                     axplorer_map[k].append(e)
 
-err = 0
-ok = 0
+
 analyzed_apks_dir = os.path.join(PATH, "Final")
 for f in os.listdir(analyzed_apks_dir):
     full_path = os.path.join(analyzed_apks_dir, f)

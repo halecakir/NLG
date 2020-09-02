@@ -1,10 +1,17 @@
 
 **/library-javadocs
+
 *.log
+*.txt
+*.json
+*.csv
+*.pkl
+*.p
+
 **/__pycache__
 **/datasets/
 **/output/
-
+.ipynb_checkpoints
 
 
 .DS_Store

@@ -7,10 +7,13 @@ from log_utils import ColoredLogger
 
 logger = ColoredLogger("parser")
 
-JAVADOC_DIR = os.path.join(
+"""JAVADOC_DIR = os.path.join(
     os.environ["NLG_ROOT"], "datasets/libraries/library-javadocs")
 OUTPUT_DIR = os.path.join(
-    os.environ["NLG_ROOT"], "output/other")
+    os.environ["NLG_ROOT"], "output/other")"""
+
+JAVADOC_DIR = "/home/huseyinalecakir/NLG/codes/notebooks/ExternalDataProcess/JavaDocs"
+OUTPUT_DIR = "/home/huseyinalecakir/NLG/codes/notebooks/ExternalDataProcess"
 
 def parse_class_list(dir, groupid, artefactid):
     classes, methods = [], []

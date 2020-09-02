@@ -2,6 +2,9 @@ import os
 import re
 import time
 import sys
+import json
+import pickle
+import ast
 
 SMALI_METHOD_START = '.method'
 SMALI_METHOD_END = '.end method'
@@ -9,9 +12,7 @@ SMALI_CLASS = '.class'
 ROOT_PATH = "/home/huseyinalecakir"
 MAX_DEPTH_LIMIT = 50
 MAX_VISITED_LIMIT = 10
-
-class ManifestNotExistError(Exception):
-    pass
+CALL_GRAP_OUT_PATH = "/data/huseyinalecakir_data/CallGraphOutputs"
 
 class Node:
     def __init__(self, parent, path, method_name, class_name):
@@ -25,6 +26,8 @@ class Node:
         self.depth = 0
         self.visited = {}
         self.parent = parent
+        self.detected_lib = None
+        self.is_third_party = False
 
     def add_child(self, node):
         self.childs.append(node)
@@ -44,15 +47,19 @@ class Node:
     def get_depth(self):
         return self.depth
 
+class ManifestNotExistError(Exception):
+    pass
+
 class ThirdPartyAnalyzer:
-    def __init__(self, path, module, api_mapping, intent_mapping):
+    def __init__(self, path, module, api_mapping, intent_mapping, detected_libs):
         self.path = path
         self.module = module
         self.custom_path = os.path.join(path, "smali", module)
         self.api_mapping = api_mapping
         self.intent_mapping = intent_mapping
         self.signature_cache = {}
-
+        self.detected_3party_libs = detected_libs
+        
     def extract_permission_by_contentp(self, method):
         """Extract permissions which are requested by Content Providers"""
         def is_exist(keyword, lst):
@@ -77,7 +84,7 @@ class ThirdPartyAnalyzer:
                     return self.api_mapping[api]
             return None
         for line in method[1:-1]:
-            requested_perm = match_api_call(line) 
+            requested_perm= match_api_call(line) 
             if requested_perm:
                 perm_methods.extend(requested_perm)
         return perm_methods
@@ -141,7 +148,19 @@ class ThirdPartyAnalyzer:
             node.add_cp_permission(p)
         for p in perm_intent:
             node.add_intent_permissions(p)
-
+    
+    def match_with_detected_libs(self, node):
+        class_name = node.class_name.strip().split()[-1]
+        for lib in self.detected_3party_libs:
+            if lib["package"] and lib["package"] in class_name: 
+                node.detected_lib = lib
+                return
+    
+    def check_is_thirdparty(self, node):
+        class_name = node.class_name.strip().split()[-1]
+        if self.module not in class_name:
+            node.is_third_party = True
+        
     def visit_method(self, node, method):
         #print("Visit method", node.path, node.depth)
         signature = node.class_name + "_" + node.method_name
@@ -175,6 +194,8 @@ class ThirdPartyAnalyzer:
                                 class_name = self.inspect_class(fcontent)
                                 if called_method_content:
                                     child_node = Node(node, smali_path, called_method_content[0], class_name)
+                                    self.match_with_detected_libs(child_node)
+                                    self.check_is_thirdparty(child_node)
                                     node.add_child(child_node)
                                     child_node.set_depth(node.get_depth() + 1)
                                     child_node.visited = {key: node.visited[key] for key in node.visited}
@@ -290,18 +311,18 @@ def get_call_chain(node):
         return []
 
 def dfs(node, chains):
-    if node.cp_permissions:
-        chain = get_call_chain(node)
-        if chain:
-            chains["cp"].append(get_call_chain(node))
-    if node.api_permissions:
-        chain = get_call_chain(node)
-        if chain:
-            chains["api"].append(get_call_chain(node))
-    if node.intent_permissions:
-        chain = get_call_chain(node)
-        if chain:
-            chains["intent"].append(get_call_chain(node))
+    #if node.cp_permissions:
+    chain = get_call_chain(node)
+    if chain:
+        chains["cp"].append(chain)
+    #if node.api_permissions:
+    chain = get_call_chain(node)
+    if chain:
+        chains["api"].append(chain)
+    #if node.intent_permissions:
+    chain = get_call_chain(node)
+    if chain:
+        chains["intent"].append(chain)
     for child in node.childs:
         dfs(child, chains)
 
@@ -323,82 +344,60 @@ def permission_statistics(chains):
 def write_to_file(err, permission):
     with open("ERRORS_{}.log".format(permission), "a") as target:
         target.write(err + "\n")
+    
+def read_detection_libraries_libID(file_name):
+    with open(file_name) as json_file:
+        data = json.load(json_file)
+        k = full_path.split("/")[-1].replace(".json", "")
+        return data["libraries"]
 
-# Import mappings
+def read_detection_libraries_libRadar(file_name):
+    with open(file_name) as json_file:
+        data = json.load(json_file)
+        libraries = []
+        for lib in data:
+            l = {}
+            l["name"] = lib["Library"]
+            l["package"] = lib["Package"]
+            libraries.append(l)
+        return libraries
+
+
+## Load API and Intent Mapping
 pscout_intent_map = get_all_pscout_intent_mappings()
 axplorer_map = get_all_axplorer_api_mappings()
 
-
-PERMISSION_NAME = "test" #sys.argv[1]
-analyzed_apks_dir = os.path.join(ROOT_PATH, "NLG/datasets", PERMISSION_NAME)
 app_permissions = {}
 app_chains = {}
 app_nodes = {}
 app_analyzers = {}
-app_elapsed_times = {}
-total_begin = time.time()
-for f in os.listdir(analyzed_apks_dir):
-    full_path = os.path.join(analyzed_apks_dir, f)
-    if os.path.isdir(full_path):
-        try:
-            start = time.time()
-            module = get_custom_code(full_path)
-            print("Analyzed APK ", f)
 
-                
-            thirdparty_analyzer = ThirdPartyAnalyzer(full_path, module, axplorer_map, pscout_intent_map)
-            all_nodes = thirdparty_analyzer.traverse_all_files()
-            end = time.time()
-            print("Time elapsed: ", end - start) 
-            chains = {"api":[], "cp":[], "intent":[]}
-            for n in all_nodes:
-                dfs(n, chains)
+"""app_name = item[b"app_name"].decode("utf-8") 
+dev_sha = item[b"dev_sha"].decode("utf-8") 
+app_sha = item[b"app_sha"].decode("utf-8") 
+literadar = item[b"literadar"].decode("utf-8") 
+smali = item[b"smali"].decode("utf-8") 
+apk_path = item[b"apk_path"].decode("utf-8")""" 
 
-            app_chains[full_path] = chains
-            app_nodes[full_path] = all_nodes
-            app_elapsed_times[full_path] = end - start
-            app_permissions[full_path] = permission_statistics(chains)
-            app_analyzers[full_path] = thirdparty_analyzer
-        except ManifestNotExistError: 
-            write_to_file("ManifestNotExistError:  {}".format(full_path), PERMISSION_NAME)
+apk_path = "/home/huseyinalecakir/app-debug.apk"
+smali = "/home/huseyinalecakir/app-debug"
+literadar = "/home/huseyinalecakir/app-debug.libradar"
+try:
+    print("Analyzed APK ", apk_path) 
+    module = get_custom_code(smali)
+    detection_file = read_detection_libraries_libRadar(literadar)
+    thirdparty_analyzer = ThirdPartyAnalyzer(smali, module, axplorer_map, pscout_intent_map, detection_file)
+    head_nodes = thirdparty_analyzer.traverse_all_files()
+    chains = {"api":[], "cp":[], "intent":[]}
+    for n in head_nodes:
+        dfs(n, chains)
+    app_chains[smali] = chains
+    app_nodes[smali] = head_nodes
+    app_permissions[smali] = permission_statistics(chains)
+    app_analyzers[smali] = thirdparty_analyzer
+except ManifestNotExistError: 
+    write_to_file("ManifestNotExistError:  {}".format(apk_path))
 
-    
-
-requested_permissions = {}
-for app_name in app_permissions:
-    for permission in app_permissions[app_name]:
-        if permission not in requested_permissions:
-            requested_permissions[permission] = 0
-        requested_permissions[permission] += 1
-
-sorted_requested_permissions = {k: v for k, v in sorted(requested_permissions.items(), key=lambda item: item[1], reverse=True)}
-
-for permission in sorted_requested_permissions:
-    print(permission, sorted_requested_permissions[permission])
-
-print("Time elapsed {}".format(str(time.time() - total_begin)))
-
-
-
-"""for f in os.listdir(analyzed_apks_dir):
-    full_path = os.path.join(analyzed_apks_dir, f)
-    if os.path.isdir(full_path):
-        try:
-            module = get_custom_code(full_path)
-            thirdparty_analyzer = ThirdPartyAnalyzer(full_path, module, axplorer_map, pscout_intent_map)
-        except Exception:
-            pass"""
-
-
-def list_third_party_libs(node, libs, analyzer):
-    for child in node.childs:
-        if not child.path.startswith(analyzer.custom_path):
-            module = child.class_name.split()[-1]
-            libs.add(module)
-            list_third_party_libs(child, libs, analyzer)
-
-libs = set()
-for key in app_analyzers:
-    for node in app_nodes[key]:
-        list_third_party_libs(node, libs, app_analyzers[key])
-libs
+"""with open(os.path.join(CALL_GRAP_OUT_PATH, "{}.pkl".format(smali.replace("/", "##"))), "wb") as f:
+    pickle.dump([item, app_chains, app_nodes, app_permissions, app_analyzers], f)  
+"""
